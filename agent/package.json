@@ -1,0 +1,16 @@
+{
+  "name": "mcs-studio-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Runs on each studio Mac. Bridges the local OBS to the Studio Control dashboard over outbound HTTPS.",
+  "scripts": {
+    "start": "node agent.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "obs-websocket-js": "^5.0.6"
+  }
+}
