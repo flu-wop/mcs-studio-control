@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_BODY_BYTES = 450_000;
-const MAX_SNAPSHOT_B64 = 90_000;
+const MAX_SNAPSHOT_B64 = 200_000;
 const CAM_ID = /^[a-z0-9_-]{1,24}$/;
 const B64 = /^[A-Za-z0-9+/=]+$/;
 
@@ -95,12 +95,15 @@ export async function POST(req: Request) {
     })
     .sort((a, b) => a.id - b.id);
 
-  const w = await db.execute({ sql: `SELECT v FROM meta WHERE k = 'watch_until'`, args: [] });
-  const watching = w.rows[0] ? Number(w.rows[0].v) > now : false;
+  const w = await db.execute({ sql: `SELECT k, v FROM meta WHERE k IN ('watch_until', 'focus')`, args: [] });
+  const meta = new Map(w.rows.map((r) => [String(r.k), String(r.v)]));
+  const watching = Number(meta.get("watch_until") ?? 0) > now;
+  const [focusCam, focusUntil] = (meta.get("focus") ?? "|0").split("|");
+  const focus = watching && focusCam && Number(focusUntil) > now ? focusCam : null;
 
   if (Math.random() < 0.01) {
     await db.execute({ sql: `DELETE FROM commands WHERE created_at < ?`, args: [now - 86_400_000] });
   }
 
-  return json({ commands, watching, serverTime: now });
+  return json({ commands, watching, focus, serverTime: now });
 }

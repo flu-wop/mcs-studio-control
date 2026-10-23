@@ -21,11 +21,11 @@ function LiveImage({ src, alt }: { src: string | null; alt: string }) {
   );
 }
 
-export default function CameraWall({ data }: { data: StateResponse | null }) {
+export default function CameraWall({ data, onOpen }: { data: StateResponse | null; onOpen: (index: number) => void }) {
   return (
     <section aria-label="Cameras" className="-mx-5 px-5 lg:mx-0 lg:px-0">
       <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 lg:grid lg:grid-cols-3 lg:gap-4 lg:overflow-visible">
-        {CAMERAS.map((cam) => {
+        {CAMERAS.map((cam, index) => {
           const snap = data?.snapshots[cam.id];
           const studio = data?.studios[cam.studio];
           const fresh = !!snap && snap.ageMs < 8000;
@@ -38,7 +38,12 @@ export default function CameraWall({ data }: { data: StateResponse | null }) {
 
           return (
             <figure key={cam.id} className="min-w-[82%] snap-center sm:min-w-[46%] lg:min-w-0">
-              <div className="relative aspect-video overflow-hidden rounded-sm border border-line bg-surface-alt">
+              <button
+                type="button"
+                onClick={() => onOpen(index)}
+                aria-label={`Open ${cam.label} full screen`}
+                className="relative block aspect-video w-full overflow-hidden rounded-sm border border-line bg-surface-alt text-left transition-colors duration-fast hover:border-line-strong focus-visible:outline-none focus-visible:shadow-focus"
+              >
                 <LiveImage src={src} alt={`${cam.label} camera`} />
                 {!fresh && (
                   <div className="absolute inset-0 flex items-center justify-center bg-surface-alt/80">
@@ -51,7 +56,10 @@ export default function CameraWall({ data }: { data: StateResponse | null }) {
                     aria-hidden="true"
                   />
                 </div>
-              </div>
+                <span className="absolute bottom-2 right-2 rounded-sm bg-surface/70 px-2 py-1 text-caption uppercase text-ink-muted backdrop-blur">
+                  Full screen
+                </span>
+              </button>
               <figcaption className="mt-2 flex items-baseline justify-between">
                 <span className="font-display text-heading-4 text-ink">{cam.label}</span>
                 <span className="text-eyebrow uppercase text-ink-muted">Studio {cam.studio}</span>

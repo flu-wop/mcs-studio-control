@@ -1,7 +1,7 @@
 import { getDb } from "@/lib/db";
 import { getSession, json } from "@/lib/auth";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
-import type { CommandError, SnapshotMeta, StateResponse, StudioId, StudioState, StudioStatus } from "@/lib/types";
+import { CAMERAS, type CommandError, type SnapshotMeta, type StateResponse, type StudioId, type StudioState, type StudioStatus } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,16 +15,29 @@ export async function GET(req: Request) {
 
   const db = await getDb();
   const now = Date.now();
-  const watch = new URL(req.url).searchParams.get("watch") === "1";
+  const params = new URL(req.url).searchParams;
+  const watch = params.get("watch") === "1";
+  const focusParam = params.get("focus");
+  const focus = focusParam && CAMERAS.some((c) => c.id === focusParam) ? focusParam : "";
 
   if (watch) {
-    // Tell the agents someone is looking. Only write when the window is about to lapse.
-    const cur = await db.execute({ sql: `SELECT v FROM meta WHERE k = 'watch_until'`, args: [] });
-    const until = cur.rows[0] ? Number(cur.rows[0].v) : 0;
+    // Tell the agents someone is looking (and which camera is full screen). Only write when needed.
+    const cur = await db.execute({ sql: `SELECT k, v FROM meta WHERE k IN ('watch_until', 'focus')`, args: [] });
+    const meta = new Map(cur.rows.map((r) => [String(r.k), String(r.v)]));
+    const until = Number(meta.get("watch_until") ?? 0);
     if (until - now < WATCH_WINDOW_MS / 2) {
       await db.execute({
         sql: `INSERT INTO meta (k, v) VALUES ('watch_until', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v`,
         args: [String(now + WATCH_WINDOW_MS)],
+      });
+    }
+    // Stored as "cam|expiresAt". Rewrite when the camera changes, is closing, or is about to lapse.
+    const [curCam, curUntil] = (meta.get("focus") ?? "|0").split("|");
+    const stored = curCam && Number(curUntil) > now ? curCam : "";
+    if (focus ? stored !== focus || Number(curUntil) - now < WATCH_WINDOW_MS / 2 : stored !== "") {
+      await db.execute({
+        sql: `INSERT INTO meta (k, v) VALUES ('focus', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v`,
+        args: [focus ? `${focus}|${now + WATCH_WINDOW_MS}` : "|0"],
       });
     }
   }

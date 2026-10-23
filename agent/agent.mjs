@@ -6,7 +6,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 const here = dirname(fileURLToPath(import.meta.url));
 
 // ---------- config ----------
@@ -42,6 +42,12 @@ const cfg = {
   obsPassword: process.env.OBS_PASSWORD ?? "",
   cams: pairs(process.env.CAMERAS), // key = cam id, val = OBS source name
   mics: pairs(process.env.MIC_INPUTS), // key = OBS input name, val = label
+  // Name|server|key, comma separated. Keys stay on this Mac and are never sent to the dashboard.
+  streams: (process.env.STREAM_TARGETS ?? "")
+    .split(",")
+    .map((x) => x.trim().split("|").map((p) => p.trim()))
+    .filter((p) => p.length === 3 && p[0] && p[1] && p[2])
+    .map(([name, server, key]) => ({ name, server, key })),
   reverseScenes: (process.env.SCENE_ORDER ?? "reverse").toLowerCase() !== "normal",
 };
 
@@ -60,6 +66,8 @@ let lastObsTry = 0;
 let obsWarned = false;
 let knownScenes = [];
 let sessionName = "";
+let streamTarget = null;
+let streamStartedAt = 0;
 
 /** Highest input level seen since the last report, per OBS input name (linear 0..1). */
 const peaks = new Map();
@@ -108,17 +116,28 @@ async function buildStatus(includeMeters) {
     scenes: [],
     diskFreeMb: null,
     inputs: cfg.mics.map((m) => ({ name: m.key, label: m.val, db: null, muted: null })),
+    stream: { active: false, reconnecting: false, timecode: "00:00:00.000", target: null },
+    streamTargets: cfg.streams.map((t) => t.name),
     sessionName,
     agentVersion: VERSION,
   };
   if (!obsReady) return status;
 
   try {
-    const [rec, sceneList, stats] = await Promise.all([
+    const [rec, sceneList, stats, stream] = await Promise.all([
       obs.call("GetRecordStatus"),
       obs.call("GetSceneList"),
       obs.call("GetStats"),
+      obs.call("GetStreamStatus"),
     ]);
+    // OBS reports inactive for a moment while the stream is starting, so only forget the target after a grace period.
+    if (!stream.outputActive && Date.now() - streamStartedAt > 20_000) streamTarget = null;
+    status.stream = {
+      active: !!stream.outputActive,
+      reconnecting: !!stream.outputReconnecting,
+      timecode: stream.outputTimecode ?? "00:00:00.000",
+      target: stream.outputActive ? streamTarget : null,
+    };
     status.record = { active: !!rec.outputActive, paused: !!rec.outputPaused, timecode: rec.outputTimecode ?? "00:00:00.000" };
     status.scene = sceneList.currentProgramSceneName ?? null;
     let names = sceneList.scenes.map((s) => s.sceneName);
@@ -148,20 +167,23 @@ async function buildStatus(includeMeters) {
   return status;
 }
 
-async function grabSnapshots() {
+async function grabSnapshots(focus) {
   const out = {};
+  // A full-screen camera gets a bigger, sharper picture; the others pause while it is open.
+  const cams = focus && cfg.cams.some((c) => c.key === focus) ? cfg.cams.filter((c) => c.key === focus) : cfg.cams;
   await Promise.all(
-    cfg.cams.map(async (cam) => {
+    cams.map(async (cam) => {
       try {
+        const big = cam.key === focus;
         const r = await obs.call("GetSourceScreenshot", {
           sourceName: cam.val,
           imageFormat: "jpg",
-          imageWidth: 480,
-          imageHeight: 270,
-          imageCompressionQuality: 55,
+          imageWidth: big ? 1280 : 480,
+          imageHeight: big ? 720 : 270,
+          imageCompressionQuality: big ? 60 : 55,
         });
         const b64 = String(r.imageData).replace(/^data:image\/\w+;base64,/, "");
-        if (b64.length <= 88_000) out[cam.key] = b64;
+        if (b64.length <= (big ? 195_000 : 88_000)) out[cam.key] = b64;
       } catch {
         /* source missing or not rendering; the dashboard shows "waiting for picture" */
       }
@@ -212,6 +234,26 @@ async function runCommand(cmd) {
       await obs.call("SetInputMute", { inputName: p.input, inputMuted: p.muted });
       return;
     }
+    case "stream_start": {
+      const t = cfg.streams.find((x) => x.name === p.target);
+      if (!t) throw new Error("Unknown stream destination");
+      const st = await obs.call("GetStreamStatus");
+      if (st.outputActive) return;
+      await obs.call("SetStreamServiceSettings", {
+        streamServiceType: "rtmp_custom",
+        streamServiceSettings: { server: t.server, key: t.key, use_auth: false },
+      });
+      streamTarget = t.name;
+      streamStartedAt = Date.now();
+      await obs.call("StartStream");
+      return;
+    }
+    case "stream_stop": {
+      const st = await obs.call("GetStreamStatus");
+      if (!st.outputActive) return;
+      await obs.call("StopStream");
+      return;
+    }
     case "session_name": {
       sessionName = String(p.name ?? "").replace(/[^A-Za-z0-9 _-]/g, "").slice(0, 60);
       await applyFilenameFormat();
@@ -224,6 +266,7 @@ async function runCommand(cmd) {
 
 // ---------- sync loop ----------
 let watching = false;
+let focus = null;
 let results = [];
 let lastKey = "";
 let lastStatusPost = 0;
@@ -247,8 +290,8 @@ async function cycle() {
     lastKey = key;
     lastStatusPost = now;
   }
-  if (watching && obsReady && now - lastSnapshot >= 2000) {
-    body.snapshots = await grabSnapshots();
+  if (watching && obsReady && now - lastSnapshot >= (focus ? 700 : 2000)) {
+    body.snapshots = await grabSnapshots(focus);
     lastSnapshot = Date.now();
   }
   if (results.length) body.results = results.splice(0, results.length);
@@ -278,6 +321,7 @@ async function cycle() {
 
   const data = await res.json();
   watching = !!data.watching;
+  focus = typeof data.focus === "string" ? data.focus : null;
 
   let ran = false;
   for (const cmd of data.commands ?? []) {
@@ -296,6 +340,7 @@ async function cycle() {
 
 async function main() {
   log(`Studio ${cfg.studio} agent ${VERSION} → ${cfg.appUrl}`);
+  log(`Streams: ${cfg.streams.map((t) => t.name).join(", ") || "none"}`);
   log(`Cameras: ${cfg.cams.map((c) => `${c.key}=${c.val}`).join(", ") || "none"} | Mics: ${cfg.mics.map((m) => m.key).join(", ") || "none"}`);
   for (;;) {
     const started = Date.now();

@@ -6,6 +6,7 @@ import type { StudioId, StudioState } from "@/lib/types";
 import { cx, fmtDisk } from "@/lib/format";
 import Meter from "./Meter";
 import RecButton, { type RecPending } from "./RecButton";
+import StreamControl from "./StreamControl";
 
 interface Props {
   id: StudioId;
@@ -21,6 +22,8 @@ interface Props {
   onScene: (scene: string) => void;
   onMute: (input: string, muted: boolean) => void;
   onSession: (name: string) => void;
+  onStreamStart: (target: string) => void;
+  onStreamStop: () => void;
 }
 
 export default function StudioPanel(p: Props) {
@@ -113,6 +116,8 @@ export default function StudioPanel(p: Props) {
               {status.scenes.length === 0 && <p className="col-span-full text-body-sm text-ink-muted">No scenes found in OBS.</p>}
             </div>
           </div>
+
+          <StreamControl status={status} online={online} onStart={p.onStreamStart} onStop={p.onStreamStop} />
 
           <div className="mt-6">
             <p className="text-eyebrow uppercase text-ink-muted">Audio</p>

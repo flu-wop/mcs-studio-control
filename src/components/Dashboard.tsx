@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, Button } from "@flu-wop/design-system";
-import { STUDIOS, type CommandBody, type StateResponse, type StudioId } from "@/lib/types";
+import { CAMERAS, STUDIOS, type CommandBody, type StateResponse, type StudioId } from "@/lib/types";
 import { cx } from "@/lib/format";
+import CameraViewer from "./CameraViewer";
 import CameraWall from "./CameraWall";
 import RecButton, { type RecPending } from "./RecButton";
 import StudioPanel from "./StudioPanel";
@@ -27,6 +28,12 @@ export default function Dashboard() {
   const [armed, setArmed] = useState<Target | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<number[]>([]);
+  const [viewer, setViewer] = useState<number | null>(null);
+  // The poll loop reads this so the open camera gets a larger picture without restarting the loop.
+  const focusRef = useRef<string | null>(null);
+  useEffect(() => {
+    focusRef.current = viewer === null ? null : CAMERAS[viewer].id;
+  }, [viewer]);
   const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -40,7 +47,8 @@ export default function Dashboard() {
         return;
       }
       try {
-        const res = await fetch("/api/state?watch=1", { cache: "no-store" });
+        const focus = focusRef.current;
+        const res = await fetch(`/api/state?watch=1${focus ? `&focus=${focus}` : ""}`, { cache: "no-store" });
         if (res.status === 401) {
           router.replace("/login");
           return;
@@ -158,6 +166,7 @@ export default function Dashboard() {
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (viewer !== null) return;
       const k = e.key.toLowerCase();
       if (k === "a") setSelected("A");
       else if (k === "b") setSelected("B");
@@ -169,7 +178,7 @@ export default function Dashboard() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selected, data, toggleRecording, switchScene]);
+  }, [selected, data, viewer, toggleRecording, switchScene]);
 
   // Server-reported command failures surface once each.
   const errors = (data?.errors ?? []).filter((e) => !dismissed.includes(e.id));
@@ -237,7 +246,10 @@ export default function Dashboard() {
         </div>
       )}
 
-      <CameraWall data={data} />
+      <CameraWall data={data} onOpen={setViewer} />
+      {viewer !== null && (
+        <CameraViewer data={data} index={viewer} onIndex={setViewer} onClose={() => setViewer(null)} />
+      )}
 
       {/* Phone: choose a studio. Desktop: both are visible, so this only sets the keyboard target. */}
       <div className="mt-6 flex items-center justify-between gap-4">
@@ -298,6 +310,8 @@ export default function Dashboard() {
             onScene={(scene) => switchScene(s, scene)}
             onMute={(input, muted) => send(s, { type: "mute", input, muted })}
             onSession={(name) => send(s, { type: "session_name", name })}
+            onStreamStart={(target) => send(s, { type: "stream_start", target })}
+            onStreamStop={() => send(s, { type: "stream_stop" })}
           />
         ))}
       </div>

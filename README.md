@@ -40,6 +40,20 @@ Studio A uses `AGENT_TOKEN_A` with `CAMERAS=cam1=...,cam2=...`. Studio B uses `A
 - Pictures and meters only flow while a dashboard tab is open and visible, so idle studios send almost nothing.
 - A command that the studio doesn't pick up within 20 seconds is dropped, never run later.
 
+## Full-screen cameras
+
+Tap any camera tile to open it full screen. Swipe left or right (or use the arrow keys, the side buttons, or the camera names along the bottom) to move between A Room, Booth and B Room. Esc or Close returns to the dashboard. While a camera is open, its Mac sends a larger picture.
+
+## Going live
+
+Each studio panel has a Stream section once `STREAM_TARGETS` is set in that Mac's `agent/.env`:
+
+```
+STREAM_TARGETS=Twitch|rtmp://live.twitch.tv/app|live_xxxx,YouTube|rtmp://a.rtmp.youtube.com/live2|xxxx-xxxx,Kick|<server URL>|sk_xxxx
+```
+
+Pick a destination, tap Go live, and tap again to confirm. Ending takes two taps too. Stream keys stay on the Mac and are never sent to the dashboard. One destination can be live at a time per studio. Quality (bitrate, encoder, resolution) comes from your OBS output settings. After changing `.env`, restart the agent with `launchctl kickstart -k gui/$(id -u)/com.midcitysound.studio-agent`.
+
 ## Troubleshooting
 
 - **Studio shows Offline:** agent isn't running or the token is wrong. Check the log.

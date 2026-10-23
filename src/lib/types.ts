@@ -26,6 +26,9 @@ export interface StudioStatus {
   scenes: string[];
   diskFreeMb: number | null;
   inputs: InputStatus[];
+  /** Live stream state. Stream keys never leave the Mac; only target names are reported. */
+  stream: { active: boolean; reconnecting: boolean; timecode: string; target: string | null };
+  streamTargets: string[];
   sessionName: string;
   agentVersion: string;
 }
@@ -62,7 +65,12 @@ export type CommandBody =
   | { type: "record_stop" }
   | { type: "scene"; scene: string }
   | { type: "mute"; input: string; muted: boolean }
-  | { type: "session_name"; name: string };
+  | { type: "session_name"; name: string }
+  | { type: "stream_start"; target: string }
+  | { type: "stream_stop" };
+
+/** Camera currently open full screen on a dashboard; its agent sends a larger picture. */
+export type FocusCam = string | null;
 
 export interface AgentCommand {
   id: number;

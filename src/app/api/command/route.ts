@@ -66,6 +66,18 @@ export async function POST(req: Request) {
       break;
     }
 
+    case "stream_start": {
+      if (target === "BOTH" || typeof body.target !== "string") return json({ error: "Invalid stream target" }, 400);
+      const st = await knownStatus(target);
+      if (!st || !(st.streamTargets ?? []).includes(body.target)) return json({ error: "Unknown stream target" }, 400);
+      payload = { target: body.target };
+      break;
+    }
+
+    case "stream_stop":
+      if (target === "BOTH") return json({ error: "Stop each stream separately" }, 400);
+      break;
+
     case "session_name": {
       if (typeof body.name !== "string") return json({ error: "Invalid name" }, 400);
       const clean = body.name
