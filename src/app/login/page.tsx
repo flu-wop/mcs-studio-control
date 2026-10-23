@@ -6,6 +6,7 @@ import { Button, Input } from "@flu-wop/design-system";
 
 export default function LoginPage() {
   const router = useRouter();
+  const [name, setName] = useState("Dashboard");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
@@ -42,10 +43,19 @@ export default function LoginPage() {
         </h1>
         <p className="mt-3 text-body-sm text-ink-muted">Private. Recording and cameras for both rooms.</p>
 
-        <div className="mt-8">
+        <div className="mt-8 space-y-4">
           <Input
-            label="Dashboard password"
+            label="Name"
+            type="text"
+            name="username"
+            autoComplete="username"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <Input
+            label="Password"
             type="password"
+            name="password"
             autoComplete="current-password"
             autoFocus
             value={password}
