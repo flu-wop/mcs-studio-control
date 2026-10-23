@@ -1,7 +1,7 @@
 import { getDb } from "@/lib/db";
 import { getSession, json } from "@/lib/auth";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
-import { CAMERAS, type CommandError, type Marker, type SnapshotMeta, type StateResponse, type StudioId, type StudioState, type StudioStatus } from "@/lib/types";
+import { CAMERAS, type Booking, type CommandError, type Marker, type SnapshotMeta, type StateResponse, type StudioId, type StudioState, type StudioStatus } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,7 +43,7 @@ export async function GET(req: Request) {
     }
   }
 
-  const [statusRows, snapRows, errRows, markerRows] = await Promise.all([
+  const [statusRows, snapRows, errRows, markerRows, bookingRows, armedRows] = await Promise.all([
     db.execute({ sql: `SELECT studio, json, updated_at FROM studio_status`, args: [] }),
     db.execute({ sql: `SELECT cam, studio, updated_at FROM snapshots`, args: [] }),
     db.execute({
@@ -52,6 +52,12 @@ export async function GET(req: Request) {
       args: [now - 30_000],
     }),
     db.execute({ sql: `SELECT id, studio, tc, label, created_at FROM markers ORDER BY id DESC LIMIT 20`, args: [] }),
+    db.execute({
+      sql: `SELECT id, studio, client, start_at, end_at FROM bookings
+            WHERE cancelled = 0 AND end_at > ? AND start_at < ? ORDER BY start_at LIMIT 20`,
+      args: [now, now + 24 * 3_600_000],
+    }),
+    db.execute({ sql: `SELECT k, v FROM meta WHERE k IN ('armed:A', 'armed:B')`, args: [] }),
   ]);
 
   const studios: Record<StudioId, StudioState> = {
@@ -96,6 +102,23 @@ export async function GET(req: Request) {
     }
   }
 
-  const body: StateResponse = { role: session.role, now, studios, snapshots, errors, markers };
+  // Per studio: the booking in progress (or opening within 15 minutes), else the next one today.
+  const armedKeys = new Map(armedRows.rows.map((r) => [String(r.k), String(r.v)]));
+  const bookings: Record<StudioId, Booking | null> = { A: null, B: null };
+  for (const r of bookingRows.rows) {
+    const id = String(r.studio) as StudioId;
+    if ((id !== "A" && id !== "B") || bookings[id]) continue;
+    const startAt = Number(r.start_at);
+    bookings[id] = {
+      id: String(r.id),
+      studio: id,
+      client: String(r.client),
+      startAt,
+      endAt: Number(r.end_at),
+      armed: armedKeys.get(`armed:${id}`) === `${String(r.id)}@${startAt}`,
+    };
+  }
+
+  const body: StateResponse = { role: session.role, now, studios, snapshots, errors, markers, bookings };
   return json(body);
 }

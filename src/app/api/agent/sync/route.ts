@@ -2,6 +2,7 @@ import { getDb } from "@/lib/db";
 import { json, studioForAgentToken } from "@/lib/auth";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import type { AgentCommand, StudioStatus } from "@/lib/types";
+import { autoArm, trackSessions } from "@/lib/booking";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +42,16 @@ export async function POST(req: Request) {
   if (body.status && typeof body.status === "object") {
     const text = JSON.stringify(body.status);
     if (text.length <= 20_000) {
+      let prev: StudioStatus | null = null;
+      try {
+        const old = await db.execute({ sql: `SELECT json FROM studio_status WHERE studio = ?`, args: [studio] });
+        prev = old.rows[0] ? (JSON.parse(String(old.rows[0].json)) as StudioStatus) : null;
+      } catch {
+        prev = null;
+      }
+      if (body.status.record && typeof body.status.record.active === "boolean") {
+        await trackSessions(db, studio, prev, body.status, now);
+      }
       await db.execute({
         sql: `INSERT INTO studio_status (studio, json, updated_at) VALUES (?, ?, ?)
               ON CONFLICT(studio) DO UPDATE SET json = excluded.json, updated_at = excluded.updated_at`,
@@ -77,6 +88,13 @@ export async function POST(req: Request) {
           WHERE status IN ('pending', 'sent') AND expires_at <= ?`,
     args: [now, now],
   });
+  // Studio's latest known state decides whether a booking should rename the next recording.
+  try {
+    const cur = await db.execute({ sql: `SELECT json FROM studio_status WHERE studio = ?`, args: [studio] });
+    await autoArm(db, studio, cur.rows[0] ? (JSON.parse(String(cur.rows[0].json)) as StudioStatus) : null, now);
+  } catch {
+    /* arming is best effort; the next check-in tries again */
+  }
   const claimed = await db.execute({
     sql: `UPDATE commands SET status = 'sent'
           WHERE studio = ? AND status = 'pending' AND expires_at > ?

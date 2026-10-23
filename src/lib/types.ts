@@ -63,6 +63,16 @@ export interface Marker {
   createdAt: number;
 }
 
+export interface Booking {
+  id: string;
+  studio: StudioId;
+  client: string;
+  startAt: number;
+  endAt: number;
+  /** The session name has been applied to the studio for this booking. */
+  armed: boolean;
+}
+
 export type Role = "owner" | "engineer";
 
 export interface StateResponse {
@@ -72,6 +82,7 @@ export interface StateResponse {
   snapshots: Record<string, SnapshotMeta>;
   errors: CommandError[];
   markers: Record<StudioId, Marker[]>;
+  bookings: Record<StudioId, Booking | null>;
 }
 
 export type CommandBody =

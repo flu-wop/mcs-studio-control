@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Badge } from "@flu-wop/design-system";
-import type { Marker, Role, StudioId, StudioState } from "@/lib/types";
+import type { Booking, Marker, Role, StudioId, StudioState } from "@/lib/types";
 import { cx, fmtDisk } from "@/lib/format";
 import Meter from "./Meter";
 import RecButton, { type RecPending } from "./RecButton";
@@ -13,6 +13,9 @@ interface Props {
   id: StudioId;
   role: Role;
   markers: Marker[];
+  booking: Booking | null;
+  /** Server clock, so countdowns don't depend on this device's clock. */
+  now: number;
   state: StudioState;
   /** Phone: only the selected studio shows. Desktop: both always show, the selected one is highlighted. */
   selected: boolean;
@@ -30,6 +33,32 @@ interface Props {
   onMark: () => void;
   onLogicRecord: () => void;
   onLogicStop: () => void;
+}
+
+const TZ = "America/Chicago";
+const clock = (ms: number) => new Date(ms).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: TZ });
+
+function until(ms: number): string {
+  const m = Math.max(1, Math.round(ms / 60000));
+  if (m < 90) return `${m} min`;
+  const h = Math.floor(m / 60);
+  return `${h} h ${m % 60} min`;
+}
+
+function BookingCard({ booking, now }: { booking: Booking; now: number }) {
+  const live = now >= booking.startAt;
+  return (
+    <div className="mt-5 rounded-sm border border-line bg-surface px-4 py-3">
+      <p className="text-eyebrow uppercase text-ink-muted">{live ? "In session" : "Next booking"}</p>
+      <p className="mt-1 font-display text-heading-4 leading-tight text-ink">{booking.client}</p>
+      <p className="mt-1 font-mono text-caption text-ink-muted">
+        {clock(booking.startAt)} – {clock(booking.endAt)}
+        {!live && ` · starts in ${until(booking.startAt - now)}`}
+        {live && ` · ${until(booking.endAt - now)} left`}
+      </p>
+      {booking.armed && <p className="mt-1 text-caption text-accent-text">Ready. The next recording is named for this client.</p>}
+    </div>
+  );
 }
 
 export default function StudioPanel(p: Props) {
@@ -71,6 +100,8 @@ export default function StudioPanel(p: Props) {
           </span>
         </div>
       </header>
+
+      {p.booking && <BookingCard booking={p.booking} now={p.now} />}
 
       {!status ? (
         <p className="mt-6 text-body-sm text-ink-muted">

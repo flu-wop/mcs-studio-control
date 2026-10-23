@@ -70,6 +70,16 @@ Set `LOGIC_CONTROL=on` in a Mac's `agent/.env` to show Logic Record and Stop but
 
 One-time setup on that Mac: System Settings > Privacy & Security > Accessibility, add the `node` program (run `which node` for its path; in the file picker press Cmd+Shift+G to type it), then restart the agent. macOS may also ask to let node control Logic Pro and System Events; allow both.
 
+## Bookings
+
+The MCS site tells Studio Control about bookings by calling `POST /api/bookings/webhook` after a booking is paid, changed or cancelled. Add `integrations/notify-studio-control.ts` to the MCS site, set `STUDIO_CONTROL_URL` and `BOOKING_WEBHOOK_SECRET` there (same secret as this project), and call `notifyStudioControl({ id, room: "A", client, start, end })` where a paid booking is confirmed. Call it again with `cancelled: true` if a booking is cancelled. Rooms other than A and B are ignored. Requests are signed (HMAC-SHA256 over timestamp and body) and expire after 5 minutes.
+
+Each studio panel shows its current or next booking. From 15 minutes before a booking starts, the studio's session name is set to the client's name, so the recording files are named for them. Nothing starts recording by itself; someone still presses Record. If you rename the session by hand afterwards, it stays as you set it.
+
+## Session archive
+
+**Archive** in the header (owner only) lists every recording: studio, client or session name, start and end times, length, who pressed Record (Owner, an engineer's name, or OBS), and a CSV of any marked moments. Recordings are logged wherever Record was pressed, including in OBS itself. The video files stay on the studio Macs.
+
 ## Troubleshooting
 
 - **Studio shows Offline:** agent isn't running or the token is wrong. Check the log.

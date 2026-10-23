@@ -1,6 +1,7 @@
 import { getDb } from "@/lib/db";
 import { getSession, json, sameOrigin } from "@/lib/auth";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { cleanSessionName } from "@/lib/booking";
 import { ENGINEER_COMMANDS, type StudioId, type StudioStatus } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -126,11 +127,7 @@ export async function POST(req: Request) {
 
     case "session_name": {
       if (typeof body.name !== "string") return json({ error: "Invalid name" }, 400);
-      const clean = body.name
-        .trim()
-        .replace(/[^A-Za-z0-9 _-]/g, "")
-        .replace(/\s+/g, "-")
-        .slice(0, 60);
+      const clean = cleanSessionName(body.name);
       payload = { name: clean };
       break;
     }
@@ -142,6 +139,15 @@ export async function POST(req: Request) {
   const db = await getDb();
   const now = Date.now();
   const ids: number[] = [];
+  if (type === "record_start") {
+    const who = session.role === "owner" ? "Owner" : (session.label ?? "Engineer");
+    for (const s of studios) {
+      await db.execute({
+        sql: `INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v`,
+        args: [`rec_by:${s}`, `${who}|${now}`],
+      });
+    }
+  }
   for (const s of studios) {
     const r = await db.execute({
       sql: `INSERT INTO commands (studio, type, payload, status, created_at, expires_at)

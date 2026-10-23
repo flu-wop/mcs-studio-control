@@ -58,6 +58,26 @@ const SCHEMA = [
     author TEXT NOT NULL,
     created_at INTEGER NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS bookings (
+    id TEXT PRIMARY KEY,
+    studio TEXT NOT NULL,
+    client TEXT NOT NULL,
+    start_at INTEGER NOT NULL,
+    end_at INTEGER NOT NULL,
+    cancelled INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_bookings_window ON bookings(studio, cancelled, end_at)`,
+  `CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    studio TEXT NOT NULL,
+    name TEXT NOT NULL,
+    booking_id TEXT,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    started_by TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_sessions_studio ON sessions(studio, ended_at)`,
   `CREATE TABLE IF NOT EXISTS rate_limits (
     k TEXT,
     w INTEGER,

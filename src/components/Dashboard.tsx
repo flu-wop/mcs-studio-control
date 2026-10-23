@@ -228,6 +228,11 @@ export default function Dashboard() {
         <div className="flex items-center gap-3">
           {role === "engineer" && <Badge variant="neutral">Engineer</Badge>}
           {role === "owner" && data && (
+            <Button variant="ghost" size="sm" onClick={() => router.push("/archive")}>
+              Archive
+            </Button>
+          )}
+          {role === "owner" && data && (
             <Button variant="outline" size="sm" onClick={() => setInviting(true)}>
               Invite engineer
             </Button>
@@ -319,6 +324,8 @@ export default function Dashboard() {
             id={s}
             role={role}
             markers={data?.markers[s] ?? []}
+            booking={data?.bookings[s] ?? null}
+            now={data?.now ?? 0}
             state={data?.studios[s] ?? { online: false, ageMs: null, status: null }}
             selected={selected === s}
             pendingRec={recPendingFor(s)}
