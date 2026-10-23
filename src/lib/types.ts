@@ -29,6 +29,8 @@ export interface StudioStatus {
   /** Live stream state. Stream keys never leave the Mac; only target names are reported. */
   stream: { active: boolean; reconnecting: boolean; timecode: string; target: string | null };
   streamTargets: string[];
+  /** True when this Mac's agent is set up to press Logic's record and stop keys. */
+  logic: boolean;
   sessionName: string;
   agentVersion: string;
 }
@@ -53,11 +55,23 @@ export interface CommandError {
   message: string;
 }
 
+export interface Marker {
+  id: number;
+  studio: StudioId;
+  tc: string;
+  label: string;
+  createdAt: number;
+}
+
+export type Role = "owner" | "engineer";
+
 export interface StateResponse {
+  role: Role;
   now: number;
   studios: Record<StudioId, StudioState>;
   snapshots: Record<string, SnapshotMeta>;
   errors: CommandError[];
+  markers: Record<StudioId, Marker[]>;
 }
 
 export type CommandBody =
@@ -67,7 +81,13 @@ export type CommandBody =
   | { type: "mute"; input: string; muted: boolean }
   | { type: "session_name"; name: string }
   | { type: "stream_start"; target: string }
-  | { type: "stream_stop" };
+  | { type: "stream_stop" }
+  | { type: "marker"; label?: string }
+  | { type: "logic_record" }
+  | { type: "logic_stop" };
+
+/** What an engineer may send. Everything else is owner only. */
+export const ENGINEER_COMMANDS: CommandBody["type"][] = ["record_start", "record_stop", "scene", "mute", "marker"];
 
 /** Camera currently open full screen on a dashboard; its agent sends a larger picture. */
 export type FocusCam = string | null;

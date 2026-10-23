@@ -6,6 +6,7 @@ import { Badge, Button } from "@flu-wop/design-system";
 import { CAMERAS, STUDIOS, type CommandBody, type StateResponse, type StudioId } from "@/lib/types";
 import { cx } from "@/lib/format";
 import CameraViewer from "./CameraViewer";
+import InvitePanel from "./InvitePanel";
 import CameraWall from "./CameraWall";
 import RecButton, { type RecPending } from "./RecButton";
 import StudioPanel from "./StudioPanel";
@@ -29,6 +30,7 @@ export default function Dashboard() {
   const [notice, setNotice] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<number[]>([]);
   const [viewer, setViewer] = useState<number | null>(null);
+  const [inviting, setInviting] = useState(false);
   // The poll loop reads this so the open camera gets a larger picture without restarting the loop.
   const focusRef = useRef<string | null>(null);
   useEffect(() => {
@@ -160,6 +162,13 @@ export default function Dashboard() {
     [data, send],
   );
 
+  const markMoment = useCallback(
+    async (s: StudioId) => {
+      if (await send(s, { type: "marker" })) flash(`Marked Studio ${s}`);
+    },
+    [send, flash],
+  );
+
   // Keyboard: A/B pick a studio, R records, 1-9 pick a scene.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -171,6 +180,7 @@ export default function Dashboard() {
       if (k === "a") setSelected("A");
       else if (k === "b") setSelected("B");
       else if (k === "r") toggleRecording(selected);
+      else if (k === "m") markMoment(selected);
       else if (/^[1-9]$/.test(k)) {
         const scene = data?.studios[selected].status?.scenes[Number(k) - 1];
         if (scene) switchScene(selected, scene);
@@ -178,7 +188,7 @@ export default function Dashboard() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selected, data, viewer, toggleRecording, switchScene]);
+  }, [selected, data, viewer, toggleRecording, switchScene, markMoment]);
 
   // Server-reported command failures surface once each.
   const errors = (data?.errors ?? []).filter((e) => !dismissed.includes(e.id));
@@ -197,6 +207,7 @@ export default function Dashboard() {
     return data?.studios[s].status?.scene === p.scene ? null : p.scene;
   };
 
+  const role = data?.role ?? "owner";
   const anyRecording = STUDIOS.some(isRecording);
   const bothOnline = STUDIOS.every((s) => data?.studios[s].online && data.studios[s].status?.obsConnected);
   const bothPending: RecPending = STUDIOS.some((s) => recPendingFor(s) !== null)
@@ -215,6 +226,12 @@ export default function Dashboard() {
           </h1>
         </div>
         <div className="flex items-center gap-3">
+          {role === "engineer" && <Badge variant="neutral">Engineer</Badge>}
+          {role === "owner" && data && (
+            <Button variant="outline" size="sm" onClick={() => setInviting(true)}>
+              Invite engineer
+            </Button>
+          )}
           {connected ? <Badge variant="success">Live</Badge> : <Badge variant="danger">Reconnecting</Badge>}
           <Button
             variant="ghost"
@@ -246,6 +263,7 @@ export default function Dashboard() {
         </div>
       )}
 
+      {inviting && <InvitePanel onClose={() => setInviting(false)} />}
       <CameraWall data={data} onOpen={setViewer} />
       {viewer !== null && (
         <CameraViewer data={data} index={viewer} onIndex={setViewer} onClose={() => setViewer(null)} />
@@ -299,6 +317,8 @@ export default function Dashboard() {
           <StudioPanel
             key={s}
             id={s}
+            role={role}
+            markers={data?.markers[s] ?? []}
             state={data?.studios[s] ?? { online: false, ageMs: null, status: null }}
             selected={selected === s}
             pendingRec={recPendingFor(s)}
@@ -312,6 +332,9 @@ export default function Dashboard() {
             onSession={(name) => send(s, { type: "session_name", name })}
             onStreamStart={(target) => send(s, { type: "stream_start", target })}
             onStreamStop={() => send(s, { type: "stream_stop" })}
+            onMark={() => markMoment(s)}
+            onLogicRecord={() => send(s, { type: "logic_record" })}
+            onLogicStop={() => send(s, { type: "logic_stop" })}
           />
         ))}
       </div>

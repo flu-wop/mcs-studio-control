@@ -31,6 +31,33 @@ const SCHEMA = [
     k TEXT PRIMARY KEY,
     v TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS invites (
+    id TEXT PRIMARY KEY,
+    code_hash TEXT NOT NULL,
+    label TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    used_at INTEGER,
+    revoked INTEGER NOT NULL DEFAULT 0
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_invites_hash ON invites(code_hash)`,
+  `CREATE TABLE IF NOT EXISTS engineers (
+    id TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    last_seen INTEGER NOT NULL,
+    revoked_at INTEGER
+  )`,
+  `CREATE TABLE IF NOT EXISTS markers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    studio TEXT NOT NULL,
+    tc TEXT NOT NULL,
+    tc_ms INTEGER NOT NULL,
+    rec_start INTEGER NOT NULL,
+    label TEXT NOT NULL,
+    author TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS rate_limits (
     k TEXT,
     w INTEGER,

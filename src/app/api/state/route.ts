@@ -1,7 +1,7 @@
 import { getDb } from "@/lib/db";
 import { getSession, json } from "@/lib/auth";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
-import { CAMERAS, type CommandError, type SnapshotMeta, type StateResponse, type StudioId, type StudioState, type StudioStatus } from "@/lib/types";
+import { CAMERAS, type CommandError, type Marker, type SnapshotMeta, type StateResponse, type StudioId, type StudioState, type StudioStatus } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,7 +10,8 @@ const ONLINE_MS = 20_000;
 const WATCH_WINDOW_MS = 12_000;
 
 export async function GET(req: Request) {
-  if (!(await getSession())) return json({ error: "Unauthorized" }, 401);
+  const session = await getSession();
+  if (!session) return json({ error: "Unauthorized" }, 401);
   if (!(await rateLimit(`state:${clientIp(req)}`, 300, 60))) return json({ error: "Too many requests" }, 429);
 
   const db = await getDb();
@@ -42,7 +43,7 @@ export async function GET(req: Request) {
     }
   }
 
-  const [statusRows, snapRows, errRows] = await Promise.all([
+  const [statusRows, snapRows, errRows, markerRows] = await Promise.all([
     db.execute({ sql: `SELECT studio, json, updated_at FROM studio_status`, args: [] }),
     db.execute({ sql: `SELECT cam, studio, updated_at FROM snapshots`, args: [] }),
     db.execute({
@@ -50,6 +51,7 @@ export async function GET(req: Request) {
             WHERE status IN ('failed', 'expired') AND created_at > ? ORDER BY id DESC LIMIT 5`,
       args: [now - 30_000],
     }),
+    db.execute({ sql: `SELECT id, studio, tc, label, created_at FROM markers ORDER BY id DESC LIMIT 20`, args: [] }),
   ]);
 
   const studios: Record<StudioId, StudioState> = {
@@ -86,6 +88,14 @@ export async function GET(req: Request) {
     message: r.result ? String(r.result) : "Command did not run",
   }));
 
-  const body: StateResponse = { now, studios, snapshots, errors };
+  const markers: Record<StudioId, Marker[]> = { A: [], B: [] };
+  for (const r of markerRows.rows) {
+    const id = String(r.studio) as StudioId;
+    if ((id === "A" || id === "B") && markers[id].length < 6) {
+      markers[id].push({ id: Number(r.id), studio: id, tc: String(r.tc), label: String(r.label), createdAt: Number(r.created_at) });
+    }
+  }
+
+  const body: StateResponse = { role: session.role, now, studios, snapshots, errors, markers };
   return json(body);
 }

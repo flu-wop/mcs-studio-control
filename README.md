@@ -54,6 +54,22 @@ STREAM_TARGETS=Twitch|rtmp://live.twitch.tv/app|live_xxxx,YouTube|rtmp://a.rtmp.
 
 Pick a destination, tap Go live, and tap again to confirm. Ending takes two taps too. Stream keys stay on the Mac and are never sent to the dashboard. One destination can be live at a time per studio. Quality (bitrate, encoder, resolution) comes from your OBS output settings. After changing `.env`, restart the agent with `launchctl kickstart -k gui/$(id -u)/com.midcitysound.studio-agent`.
 
+## Engineers
+
+Owner only: tap **Invite engineer**, type their name, and tap Make code. They get a 6-digit code that works once and expires in 10 minutes. They open the site, tap "I have an engineer code", and type it. You can cancel an open code or sign an engineer out at any time from the same panel, and a sign-out takes effect within a few seconds.
+
+Engineers can record and stop, switch scenes, mute mics, and mark moments. They cannot go live, control Logic, rename sessions, or invite anyone.
+
+## Mark moment
+
+While a studio is recording, tap **Mark moment** (or press `M`) to drop a timestamped marker. The latest markers show under the Record button, and **CSV** downloads the markers from that studio's most recent recording (timecode, label, who marked it).
+
+## Logic
+
+Set `LOGIC_CONTROL=on` in a Mac's `agent/.env` to show Logic Record and Stop buttons (owner only, two taps each). The agent presses Logic's own keys, so `LOGIC_RECORD_KEY` and `LOGIC_STOP_KEY` must match Logic's key commands (defaults `r` and `space`). Stop sends the play/stop key, which starts playback if Logic is idle, so use it only while Logic is running.
+
+One-time setup on that Mac: System Settings > Privacy & Security > Accessibility, add the `node` program (run `which node` for its path; in the file picker press Cmd+Shift+G to type it), then restart the agent. macOS may also ask to let node control Logic Pro and System Events; allow both.
+
 ## Troubleshooting
 
 - **Studio shows Offline:** agent isn't running or the token is wrong. Check the log.

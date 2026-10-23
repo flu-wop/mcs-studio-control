@@ -2,14 +2,17 @@
 
 import { useState } from "react";
 import { Badge } from "@flu-wop/design-system";
-import type { StudioId, StudioState } from "@/lib/types";
+import type { Marker, Role, StudioId, StudioState } from "@/lib/types";
 import { cx, fmtDisk } from "@/lib/format";
 import Meter from "./Meter";
 import RecButton, { type RecPending } from "./RecButton";
 import StreamControl from "./StreamControl";
+import LogicControl from "./LogicControl";
 
 interface Props {
   id: StudioId;
+  role: Role;
+  markers: Marker[];
   state: StudioState;
   /** Phone: only the selected studio shows. Desktop: both always show, the selected one is highlighted. */
   selected: boolean;
@@ -24,10 +27,14 @@ interface Props {
   onSession: (name: string) => void;
   onStreamStart: (target: string) => void;
   onStreamStop: () => void;
+  onMark: () => void;
+  onLogicRecord: () => void;
+  onLogicStop: () => void;
 }
 
 export default function StudioPanel(p: Props) {
   const { id, state, selected } = p;
+  const owner = p.role === "owner";
   const status = state.status;
   const online = state.online && !!status?.obsConnected;
   const recording = !!status?.record.active;
@@ -84,6 +91,35 @@ export default function StudioPanel(p: Props) {
             />
           </div>
 
+          <div className="mt-3 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              disabled={!online || !recording}
+              onClick={p.onMark}
+              className="min-h-[48px] flex-1 rounded-sm border border-line px-4 text-body-sm uppercase tracking-[0.12em] text-ink transition-colors duration-fast hover:border-line-strong disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:shadow-focus"
+            >
+              Mark moment <span className="ml-1 hidden font-mono text-caption text-ink-muted lg:inline">M</span>
+            </button>
+            {p.markers.length > 0 && (
+              <a
+                href={`/api/markers?studio=${id}`}
+                className="flex min-h-[48px] items-center rounded-sm border border-line px-4 text-caption uppercase text-ink-muted transition-colors duration-fast hover:border-line-strong hover:text-ink"
+              >
+                CSV
+              </a>
+            )}
+          </div>
+          {p.markers.length > 0 && (
+            <ul className="mt-2 space-y-1" aria-label="Recent moments">
+              {p.markers.slice(0, 4).map((m) => (
+                <li key={m.id} className="flex items-baseline gap-3 text-caption text-ink-muted">
+                  <span className="font-mono text-ink">{m.tc}</span>
+                  <span className="truncate">{m.label}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
           <div className="mt-6">
             <p className="text-eyebrow uppercase text-ink-muted">Scene</p>
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -117,7 +153,8 @@ export default function StudioPanel(p: Props) {
             </div>
           </div>
 
-          <StreamControl status={status} online={online} onStart={p.onStreamStart} onStop={p.onStreamStop} />
+          {owner && <StreamControl status={status} online={online} onStart={p.onStreamStart} onStop={p.onStreamStop} />}
+          {owner && status.logic && <LogicControl online={online} onRecord={p.onLogicRecord} onStop={p.onLogicStop} />}
 
           <div className="mt-6">
             <p className="text-eyebrow uppercase text-ink-muted">Audio</p>
@@ -146,7 +183,7 @@ export default function StudioPanel(p: Props) {
                 className="if-input min-h-[48px] flex-1"
                 value={sessionValue}
                 placeholder="e.g. Grim-vocals"
-                disabled={!online || recording}
+                disabled={!owner || !online || recording}
                 maxLength={60}
                 onClick={(e) => e.stopPropagation()}
                 onChange={(e) => setDraft(e.target.value)}
@@ -157,7 +194,7 @@ export default function StudioPanel(p: Props) {
               />
             </div>
             <p className="mt-1.5 text-caption text-ink-muted">
-              {recording ? "Locked while recording." : "Names the next recording file."}
+              {!owner ? "Set by the studio owner." : recording ? "Locked while recording." : "Names the next recording file."}
             </p>
           </div>
         </>

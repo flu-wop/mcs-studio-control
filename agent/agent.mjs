@@ -3,10 +3,11 @@
 // Runs on each studio Mac next to OBS. Talks to OBS on localhost and to the dashboard over outbound HTTPS only.
 import OBSWebSocket, { EventSubscription } from "obs-websocket-js/json";
 import { existsSync, readFileSync } from "node:fs";
+import { execFile } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 const here = dirname(fileURLToPath(import.meta.url));
 
 // ---------- config ----------
@@ -48,6 +49,14 @@ const cfg = {
     .map((x) => x.trim().split("|").map((p) => p.trim()))
     .filter((p) => p.length === 3 && p[0] && p[1] && p[2])
     .map(([name, server, key]) => ({ name, server, key })),
+  // Logic control is off unless LOGIC_CONTROL=on. Keys must match Logic's own key commands.
+  logic: {
+    on: (process.env.LOGIC_CONTROL ?? "").toLowerCase() === "on",
+    app: process.env.LOGIC_APP ?? "Logic Pro",
+    recordKey: (process.env.LOGIC_RECORD_KEY ?? "r").toLowerCase(),
+    stopKey: (process.env.LOGIC_STOP_KEY ?? "space").toLowerCase(),
+    dryRun: process.env.LOGIC_DRY_RUN === "1",
+  },
   reverseScenes: (process.env.SCENE_ORDER ?? "reverse").toLowerCase() !== "normal",
 };
 
@@ -118,6 +127,7 @@ async function buildStatus(includeMeters) {
     inputs: cfg.mics.map((m) => ({ name: m.key, label: m.val, db: null, muted: null })),
     stream: { active: false, reconnecting: false, timecode: "00:00:00.000", target: null },
     streamTargets: cfg.streams.map((t) => t.name),
+    logic: cfg.logic.on,
     sessionName,
     agentVersion: VERSION,
   };
@@ -206,9 +216,34 @@ async function applyFilenameFormat() {
   }
 }
 
+// ---------- Logic ----------
+const KEY_CODES = { space: 49, return: 36 };
+
+/** Brings Logic to the front and presses one key, using AppleScript. Needs Accessibility permission for node. */
+function pressInLogic(key) {
+  const { app, dryRun } = cfg.logic;
+  if (!/^[a-z0-9]$|^space$|^return$/.test(key)) return Promise.reject(new Error(`Unsupported Logic key "${key}"`));
+  if (!/^[A-Za-z0-9 ._-]{1,40}$/.test(app)) return Promise.reject(new Error("Unsupported LOGIC_APP name"));
+  if (dryRun) {
+    log(`[dry run] ${app}: press ${key}`);
+    return Promise.resolve();
+  }
+  if (process.platform !== "darwin") return Promise.reject(new Error("Logic control only works on a Mac"));
+  const press = key in KEY_CODES ? `key code ${KEY_CODES[key]}` : `keystroke "${key}"`;
+  const script = [`tell application "${app}" to activate`, "delay 0.2", `tell application "System Events" to ${press}`];
+  return new Promise((resolve, reject) => {
+    execFile("osascript", script.flatMap((l) => ["-e", l]), { timeout: 8000 }, (err, _out, stderr) => {
+      if (!err) return resolve();
+      const msg = String(stderr || err.message);
+      reject(new Error(/not allowed|assistive|1002/i.test(msg) ? "Allow node in Accessibility settings on this Mac" : msg.trim().slice(0, 120)));
+    });
+  });
+}
+
 // ---------- commands ----------
 async function runCommand(cmd) {
-  if (!obsReady) throw new Error("OBS is not running on this Mac");
+  // Logic keys do not need OBS; everything else does.
+  if (!obsReady && !cmd.type.startsWith("logic_")) throw new Error("OBS is not running on this Mac");
   const p = cmd.payload ?? {};
   switch (cmd.type) {
     case "record_start": {
@@ -254,6 +289,14 @@ async function runCommand(cmd) {
       await obs.call("StopStream");
       return;
     }
+    case "logic_record":
+      if (!cfg.logic.on) throw new Error("Logic control is off on this Mac");
+      await pressInLogic(cfg.logic.recordKey);
+      return;
+    case "logic_stop":
+      if (!cfg.logic.on) throw new Error("Logic control is off on this Mac");
+      await pressInLogic(cfg.logic.stopKey);
+      return;
     case "session_name": {
       sessionName = String(p.name ?? "").replace(/[^A-Za-z0-9 _-]/g, "").slice(0, 60);
       await applyFilenameFormat();
