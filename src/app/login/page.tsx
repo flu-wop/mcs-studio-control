@@ -44,7 +44,7 @@ export default function LoginPage() {
 
         <div className="mt-8">
           <Input
-            label="Password"
+            label="Dashboard password"
             type="password"
             autoComplete="current-password"
             autoFocus
