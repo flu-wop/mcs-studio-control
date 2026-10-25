@@ -7,7 +7,7 @@ import { execFile } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 const here = dirname(fileURLToPath(import.meta.url));
 
 // ---------- config ----------
@@ -41,7 +41,11 @@ const cfg = {
   token: process.env.AGENT_TOKEN ?? "",
   obsUrl: process.env.OBS_URL ?? "ws://127.0.0.1:4455",
   obsPassword: process.env.OBS_PASSWORD ?? "",
-  cams: pairs(process.env.CAMERAS), // key = cam id, val = OBS source name
+  // key = view id, val = OBS source name, optionally "Source name|Label shown on the dashboard"
+  cams: pairs(process.env.CAMERAS).map(({ key, val }) => {
+    const [source, label] = val.split("|").map((x) => x.trim());
+    return { key, val: source, label: label || null };
+  }),
   mics: pairs(process.env.MIC_INPUTS), // key = OBS input name, val = label
   // Name|server|key, comma separated. Keys stay on this Mac and are never sent to the dashboard.
   streams: (process.env.STREAM_TARGETS ?? "")
@@ -106,9 +110,28 @@ async function connectObs() {
     obsReady = true;
     obsWarned = false;
     log("Connected to OBS");
+    await checkNames();
   } catch (e) {
     if (!obsWarned) log(`OBS not reachable at ${cfg.obsUrl}: ${e.message}`);
     obsWarned = true;
+  }
+}
+
+/** Say plainly in the log when a configured mic or picture doesn't exist in OBS, and what does. */
+async function checkNames() {
+  try {
+    const { inputs } = await obs.call("GetInputList");
+    const have = inputs.map((i) => i.inputName);
+    for (const m of cfg.mics) {
+      if (!have.includes(m.key)) log(`Mic "${m.key}" is not an input in OBS. Inputs OBS has: ${have.map((n) => `"${n}"`).join(", ") || "none"}`);
+    }
+    const { scenes } = await obs.call("GetSceneList");
+    const names = [...have, ...scenes.map((s) => s.sceneName)];
+    for (const c of cfg.cams) {
+      if (!names.includes(c.val)) log(`Camera "${c.val}" is not a source or scene in OBS. Sources and scenes OBS has: ${names.map((n) => `"${n}"`).join(", ")}`);
+    }
+  } catch (e) {
+    log("Could not check names:", e.message);
   }
 }
 
@@ -127,6 +150,7 @@ async function buildStatus(includeMeters) {
     inputs: cfg.mics.map((m) => ({ name: m.key, label: m.val, db: null, muted: null })),
     stream: { active: false, reconnecting: false, timecode: "00:00:00.000", target: null },
     streamTargets: cfg.streams.map((t) => t.name),
+    cameras: cfg.cams.map((c) => ({ id: c.key, label: c.label })),
     logic: cfg.logic.on,
     sessionName,
     agentVersion: VERSION,

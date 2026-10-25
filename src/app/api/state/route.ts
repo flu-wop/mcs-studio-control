@@ -1,7 +1,7 @@
 import { getDb } from "@/lib/db";
 import { getSession, json } from "@/lib/auth";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
-import { CAMERAS, type Booking, type CommandError, type Marker, type SnapshotMeta, type StateResponse, type StudioId, type StudioState, type StudioStatus } from "@/lib/types";
+import { type Booking, type CommandError, type Marker, type SnapshotMeta, type StateResponse, type StudioId, type StudioState, type StudioStatus } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ export async function GET(req: Request) {
   const params = new URL(req.url).searchParams;
   const watch = params.get("watch") === "1";
   const focusParam = params.get("focus");
-  const focus = focusParam && CAMERAS.some((c) => c.id === focusParam) ? focusParam : "";
+  const focus = focusParam && /^[a-z0-9_-]{1,24}$/.test(focusParam) ? focusParam : "";
 
   if (watch) {
     // Tell the agents someone is looking (and which camera is full screen). Only write when needed.

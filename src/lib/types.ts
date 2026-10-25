@@ -29,6 +29,8 @@ export interface StudioStatus {
   /** Live stream state. Stream keys never leave the Mac; only target names are reported. */
   stream: { active: boolean; reconnecting: boolean; timecode: string; target: string | null };
   streamTargets: string[];
+  /** Extra views this Mac offers (desktop screens, more cameras). Labels the agent chose, if any. */
+  cameras?: { id: string; label: string | null }[];
   /** True when this Mac's agent is set up to press Logic's record and stop keys. */
   logic: boolean;
   sessionName: string;
@@ -107,4 +109,27 @@ export interface AgentCommand {
   id: number;
   type: CommandBody["type"];
   payload: Record<string, unknown>;
+}
+
+export interface View {
+  id: string;
+  label: string;
+  studio: StudioId;
+}
+
+/** Every picture the dashboard can show: the three known cameras plus anything an agent reports, A before B. */
+export function viewsFrom(studios: Record<StudioId, StudioState> | undefined): View[] {
+  const views: View[] = CAMERAS.map((c) => ({ ...c }));
+  for (const studio of STUDIOS) {
+    for (const c of studios?.[studio].status?.cameras ?? []) {
+      if (typeof c?.id !== "string") continue;
+      const hit = views.find((v) => v.id === c.id);
+      if (hit) {
+        if (c.label) hit.label = c.label;
+      } else {
+        views.push({ id: c.id, label: c.label ?? c.id, studio });
+      }
+    }
+  }
+  return views.map((v, i) => ({ v, i })).sort((a, b) => (a.v.studio === b.v.studio ? a.i - b.i : a.v.studio < b.v.studio ? -1 : 1)).map((x) => x.v);
 }

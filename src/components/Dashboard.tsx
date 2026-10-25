@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge, Button } from "@flu-wop/design-system";
-import { CAMERAS, STUDIOS, type CommandBody, type StateResponse, type StudioId } from "@/lib/types";
+import { STUDIOS, viewsFrom, type CommandBody, type StateResponse, type StudioId } from "@/lib/types";
 import { cx } from "@/lib/format";
 import CameraViewer from "./CameraViewer";
 import InvitePanel from "./InvitePanel";
@@ -34,8 +34,8 @@ export default function Dashboard() {
   // The poll loop reads this so the open camera gets a larger picture without restarting the loop.
   const focusRef = useRef<string | null>(null);
   useEffect(() => {
-    focusRef.current = viewer === null ? null : CAMERAS[viewer].id;
-  }, [viewer]);
+    focusRef.current = viewer === null ? null : (viewsFrom(data?.studios)[viewer]?.id ?? null);
+  }, [viewer, data]);
   const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 

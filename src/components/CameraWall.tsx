@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CAMERAS, type StateResponse } from "@/lib/types";
+import { viewsFrom, type StateResponse } from "@/lib/types";
 import { cx } from "@/lib/format";
 
 /** Shows the new frame only once it has loaded, so the picture never flashes between updates. */
@@ -25,7 +25,7 @@ export default function CameraWall({ data, onOpen }: { data: StateResponse | nul
   return (
     <section aria-label="Cameras" className="-mx-5 px-5 lg:mx-0 lg:px-0">
       <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 lg:grid lg:grid-cols-3 lg:gap-4 lg:overflow-visible">
-        {CAMERAS.map((cam, index) => {
+        {viewsFrom(data?.studios).map((cam, index) => {
           const snap = data?.snapshots[cam.id];
           const studio = data?.studios[cam.studio];
           const fresh = !!snap && snap.ageMs < 8000;

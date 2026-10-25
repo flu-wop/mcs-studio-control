@@ -61,7 +61,7 @@ export async function POST(req: Request) {
   }
 
   if (body.snapshots && typeof body.snapshots === "object") {
-    for (const [cam, b64] of Object.entries(body.snapshots).slice(0, 4)) {
+    for (const [cam, b64] of Object.entries(body.snapshots).slice(0, 8)) {
       if (!CAM_ID.test(cam) || typeof b64 !== "string" || b64.length > MAX_SNAPSHOT_B64 || !B64.test(b64)) continue;
       await db.execute({
         sql: `INSERT INTO snapshots (cam, studio, jpeg_b64, updated_at) VALUES (?, ?, ?, ?)

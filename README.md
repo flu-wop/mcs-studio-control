@@ -40,6 +40,16 @@ Studio A uses `AGENT_TOKEN_A` with `CAMERAS=cam1=...,cam2=...`. Studio B uses `A
 - Pictures and meters only flow while a dashboard tab is open and visible, so idle studios send almost nothing.
 - A command that the studio doesn't pick up within 20 seconds is dropped, never run later.
 
+## Extra views (desktop screens)
+
+Any OBS source or scene can appear in the camera wall and full-screen swipe. Add it to `CAMERAS` with an id and an optional label:
+
+```
+CAMERAS=cam3=Studio B Cam,screen1=Display 1|B Desktop 1,screen2=Display 2|B Desktop 2
+```
+
+Switching what the studio is showing (the OBS program output) is done with the Scene buttons, so make a scene for each view you want to switch to.
+
 ## Full-screen cameras
 
 Tap any camera tile to open it full screen. Swipe left or right (or use the arrow keys, the side buttons, or the camera names along the bottom) to move between A Room, Booth and B Room. Esc or Close returns to the dashboard. While a camera is open, its Mac sends a larger picture.
@@ -86,7 +96,8 @@ Each studio panel shows its current or next booking. From 15 minutes before a bo
 - **OBS closed:** agent is fine but can't reach OBS. Check WebSocket is enabled and the password matches.
 - **Scenes upside down:** set `SCENE_ORDER=normal` in `agent/.env` and restart the agent.
 - **No picture on a camera tile:** the source name in `CAMERAS` must match the OBS source exactly.
-- **Mic bar stuck at -inf:** the name in `MIC_INPUTS` must match the OBS input exactly.
+- **Mic bar stuck at -inf:** the name in `MIC_INPUTS` must match the OBS input exactly. When the agent connects, its log says which mic or camera names OBS doesn't have and lists the ones it does.
+- **Meter flat but OBS's own meter moves:** check the name above. **Meter flat in OBS too:** give OBS Microphone permission in System Settings > Privacy & Security, and add the audio device under OBS Settings > Audio > Global Audio Devices so it is live in every scene.
 
 ## Phases
 

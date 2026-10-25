@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CAMERAS, type StateResponse } from "@/lib/types";
+import { viewsFrom, type StateResponse } from "@/lib/types";
 import { cx } from "@/lib/format";
 
 interface Props {
@@ -17,12 +17,13 @@ export default function CameraViewer({ data, index, onIndex, onClose }: Props) {
   const touchX = useRef<number | null>(null);
   const [shown, setShown] = useState<{ cam: string; src: string } | null>(null);
 
-  const cam = CAMERAS[index];
+  const views = viewsFrom(data?.studios);
+  const cam = views[Math.min(index, views.length - 1)];
   const snap = data?.snapshots[cam.id];
   const studio = data?.studios[cam.studio];
   const fresh = !!snap && snap.ageMs < 8000;
   const src = snap ? `/api/snapshot/${cam.id}?v=${snap.updatedAt}` : null;
-  const count = CAMERAS.length;
+  const count = views.length;
 
   const go = useCallback((step: number) => onIndex((index + step + count) % count), [index, count, onIndex]);
 
@@ -130,7 +131,7 @@ export default function CameraViewer({ data, index, onIndex, onClose }: Props) {
       </div>
 
       <div className="safe-bottom flex items-center justify-center gap-2 px-5 pt-3">
-        {CAMERAS.map((c, i) => (
+        {views.map((c, i) => (
           <button
             key={c.id}
             type="button"
